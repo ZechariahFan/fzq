@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+
+<mapper namespace="com.dj.demo.dao.FrsDataDao">
+	<select id="getDatas" statementType="CALLABLE">
+	
+		{
+		call FRS_TX_VIEW_N(
+			#{line,jdbcType=VARCHAR,mode=IN},
+			#{llen,jdbcType=INTEGER,mode=IN},
+			#{num,jdbcType=INTEGER,mode=IN},
+			#{times,jdbcType=INTEGER,mode=IN},
+			#{result,jdbcType=CURSOR,mode=OUT,javaType=ResultSet,resultMap=frs}
+		)
+	}
+	</select>
+	
+	
+	<select id="getSettingDatas" resultType="com.dj.demo.model.FrsDatas">
+		Select nvl(limit_board,500) basicNum,nvl(limit_time,0) limit_time,nvl(limit_length,0) limit_length from setFrsDartas
+	</select>
+	
+	<select id="getFRSOutDeal" statementType="CALLABLE">
+	{
+		call FRS_OUT_DEAL(
+			#{line_name,jdbcType=VARCHAR,mode=IN},
+			#{did,jdbcType=VARCHAR,mode=IN},
+			#{limit_borard,jdbcType=INTEGER,mode=IN},
+			#{operator,jdbcType=VARCHAR,mode=IN},
+			#{result,jdbcType=INTEGER,mode=OUT,javaType=INTEGER,resultMap=exc}
+		)
+	}
+	</select>
+	
+	<resultMap	id="exc" type="com.dj.demo.model.Exception">
+		<result column="OUTSTATUS" property="exception"></result>
+	</resultMap>
+	
+	<select id="getSets" parameterType="com.dj.demo.model.FrsDatas" resultType="int">
+		select count(1) from setFrsDartas
+	</select>
+	
+	<resultMap	id="frs" type="com.dj.demo.model.FrsDatas">
+		<result column="UPD_DID" property="upd_did"></result>
+	</resultMap>
+	
+	<insert id="insertSets" parameterType="com.dj.demo.model.FrsDatas">
+		INSERT INTO setFrsDartas (limit_board,limit_time,limit_length) values (#{basicNum},#{limit_time},#{limit_length})
+	</insert>
+	
+	<update id="updateSets1" parameterType="com.dj.demo.model.FrsDatas">
+		update setFrsDartas
+    <set>
+      <if test="limit_board != null">limit_board=#{limit_board},</if>
+      <if test="limit_time != null">limit_time=#{limit_time},</if>
+      <if test="limit_length != null">limit_length=#{limit_length}</if>
+    </set>
+	</update>
+
+	<select id="findDid" parameterType="string" resultType="int">
+		SELECT count(1) from FRS.RACK_INFO  WHERE DID=#{did}
+	</select>
+	
+	<select id="getAll" resultType="com.dj.demo.model.FrsDatas">
+		SELECT t.g_code parts_code,t.rack_position rackposition FROM frs.RACK_INFO  t where t.g_code is not null ORDER BY t.g_code
+	</select>
+	
+	
+	<select id="getGcode" parameterType="string" resultType="string">
+		SELECT T.G_CODE  FROM FRS.PCB_PARTS_HISTORY T WHERE T.DID = #{did}
+	</select>
+	
+	<select id="getVrack_position" parameterType="string" resultType="string">
+		SELECT R.RACK_POSITION  FROM FRS.RACK_INFO R WHERE R.DID = #{did}
+	</select>
+	
+	<select id="getQty" parameterType="string" resultType="string">
+		Select DIDOQTY-(DIDUSED+DIDERR) As Qty From frs.T_DID Where DIDDID =#{did}
+	</select>
+	
+	
+	<insert id="insertSql" parameterType="com.dj.demo.model.FrsDatas">
+		INSERT INTO FRS.PROCESS_DID
+    (RACK_POSITION,
+     DID,
+     IO_DATE,
+     ROUNDS,
+     G_CODE,
+     IO_FLAG,
+     OPERATOR,
+     PLACEMENT,
+     QTY)
+  VALUES
+    (#{rackposition},
+     #{did},
+     SYSDATE,
+     4,
+     #{parts_code},
+     '1',
+     '',
+     '',
+     #{parts_qty}); 
+	</insert>
+	
+	<select id="findSameParts_code" parameterType="map" resultType="com.dj.demo.model.FrsDatas">
+		SELECT T.G_code parts_code, T.RACK_POSITION rackposition
+  FROM FRS.RACK_INFO T, FRS.RACK_MASTER A
+<where> g_code=#{g_code} and SUBSTR(T.RACK_POSITION, 1, 3) = A.RACK_LABEL 
+       <if test="rackId != null and rackId != ''">
+       AND A.AREA_ID IN 
+		<foreach collection="rackId" item="ep" separator="," open="(" close=")">
+							#{ep}
+		</foreach>
+		</if> </where>
+		
+	</select>
+	
+	
+	<insert id="addTemp" parameterType="java.util.List">
+		insert into frs_tx_temp 
+		(UPD_DID,PARTS_CODE,LINE_NAME,MAC_CODE,LIMIT_BOARD,
+		PARTS_QTY,DID,RACKPOSITION,LIMIT_LENGTH,tblno) 
+		select A.* from( 
+ <foreach collection="list" item="dto" index="index" separator="UNION ALL">
+  select
+     #{dto.upd_did,jdbcType=VARCHAR}
+     ,#{dto.parts_code,jdbcType=VARCHAR}
+     ,#{dto.line_name,jdbcType=VARCHAR}
+     ,#{dto.mac_code,jdbcType=VARCHAR}
+     ,#{dto.limit_board,jdbcType=VARCHAR}
+     ,#{dto.parts_qty,jdbcType=VARCHAR}
+     ,#{dto.did,jdbcType=VARCHAR}
+     ,#{dto.rackposition,jdbcType=VARCHAR}
+     ,#{dto.limit_length,jdbcType=VARCHAR}
+     ,#{dto.tblno,jdbcType=VARCHAR}
+  from dual
+ </foreach>) A
+	</insert>
+	
+	
+	<select id="getList"  parameterType="map" resultType="com.dj.demo.model.FrsDatas">
+		select * from frs_tx_temp <where> line_name like '%${lineName}%'
+			<if test="rackId != null and rackId != ''">
+			and SUBSTR(rackposition, 3, 1) in
+			<foreach collection="rackId" item="ep" separator="," open="(" close=")">
+							#{ep}
+		</foreach>
+		</if>
+		</where>
+		  order by RACKPOSITION
+		  
+	</select>
+	
+	<delete id="deleteDatas">
+		delete from frs_tx_temp where line_name like '%${lineName}%' 
+	</delete>
+	
+	
+	<select id="getListByDid" parameterType="string" resultType="com.dj.demo.model.FrsDatas">
+		select * from frs_tx_temp where did !=#{did} and line_name like '%${lineName}%'  order by RACKPOSITION
+	 </select>
+	 
+	 
+	 <select id="getGcodeByRackInfo" parameterType="string" resultType="com.dj.demo.model.FrsDatas">
+	 	select g_code parts_code,rack_position rackposition from FRS.RACK_INFO  where  did=#{did}
+	 </select>
+	 
+	 <delete id="deleteDid" parameterType="string">
+	 	delete from frs_tx_temp where did =#{did} and line_name like '%${lineName}%'
+	 </delete>
+	 
+	 <select id="getBasicNum" resultType="string">
+	 	SELECT limit_board from setFrsDartas
+	 </select>
+</mapper>
